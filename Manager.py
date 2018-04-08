@@ -1,14 +1,16 @@
-#import DynamicModule
 import os
 import sys
 import importlib
 
-# ModuleManager
+
 class Manager:
+    """
+    Dynamic Module Manger to handle all modules loaded in dynamically
+    """
     def __init__(self, abs_module_path):
         sys.path.insert(0, abs_module_path)
 
-        # Holds absolute filepath to module folder
+        # Holds absolute file path to module folder
         self.module_dir_path = abs_module_path
 
         # Dictionary where keys are module names relative to absModulePath
@@ -28,24 +30,27 @@ class Manager:
                 if file.endswith(".py"):
                     # Create a python module import path relative to the absModulePath
                     import_path = os.path.join(
-                        dirPath.replace(module_root_path, "")[1:],
+                        dir_path.replace(module_root_path, "")[1:],
                         os.path.splitext(file)[0]
                     ).replace("/", ".")
 
                     cur_module = self.module_list.get(import_path)
 
                     # Import the python module and keep a reference to it
-                    # if it is not alredy imported by us
+                    # if it is not already imported by us
                     if not cur_module:
                         self.add_module(import_path)
                     # If found module but the modified time changed then reload it
-                    elif cur_module and cur_module["mtime"] != self.os.path.getmtime(self.get_os_path(import_path)):
-                        self.reload_module(self, import_path)
+                    elif cur_module and cur_module["mtime"] != os.path.getmtime(self.get_os_path(import_path)):
+                        self.reload_module(import_path)
 
     @staticmethod
     def get_os_path(module_root_path, module_path):
         # Convert dot-notation back to path-notation
         module_path = module_path.replace(".", "/")
+
+        # Add extension back to path
+        module_path += ".py"
 
         # Join from the absolute path to the module path
         return os.path.join(module_root_path, module_path)
@@ -65,34 +70,46 @@ class Manager:
         return os.path.splitext(os_path)[0]
 
     def get_modules(self):
-        return self.moduleList
+        return self.module_list
 
     def add_module(self, module_path):
-        module == __import__(module_path)
+        # Get the module class from the module file name
+        module_class_name = module_path
+        # If it is in sub directories then just get the module's name
+        if module_path.count("."):
+            module_class_name = module_path.split(".")[-1]
+
+
+        # Get's the module's class to call functions on
+        module = importlib.import_module(module_path)
+        module_class = getattr(module, module_class_name.capitalize())
+
+        # Create's an instance of that module's class
+        module_instance = module_class()
 
         self.module_list[module_path] = {
             "ref": module,
-            "mtime": os.path.getmtime(os.path.join(dir_path, file))
+            "instance": module_instance,
+            "mtime": os.path.getmtime(os.path.join(self.get_os_path(self.module_dir_path, module_path)))
         }
 
         # Initialize Module
-        module.Init()
+        module_instance.init()
 
     def remove_module(self, module_path):
         # Get our module reference
-        module = self.moduleList[module_path]["ref"]
+        module = self.module_list[module_path]["ref"]
+
         # Shutdown any work on that module
-        module.Shutdown()
-
-
+        module.shutdown()
 
         # Remove references to module
         del module
-        del self.moduleList[module_path]
+        del self.module_list[module_path]
 
     def reload_modules(self):
         # Reload all modules in our list
-        for module in self.moduleList.items():
+        for module in self.module_list.values():
             importlib.reload(module["ref"])
 
         # Invalidate any caches
@@ -103,19 +120,22 @@ class Manager:
         importlib.reload(module_path)
 
         # Update new module time
-        self.module_list[import_path]["mtime"] = self.os.path.getmtime(self.get_os_path(import_path))
+        self.module_list[module_path]["mtime"] = os.path.getmtime(self.get_os_path(self.module_dir_path, module_path))
 
         # Invalidate Cache
         importlib.invalidate_caches()
 
     def shutdown(self):
-        for module in self.moduleList:
-            module.Shutdown()
+        for module in self.module_list.values():
+            module["instance"].shutdown()
 
-# Create new instance of a Dynamic module loader
-# Takes a path of where the modules should be loaded from
-# This can be either an absolute or relative path
+
 def Init(modules_dir_path):
+    """
+    Create a new instance of the Dynamic Module Loader Manager
+    :param modules_dir_path: Path where dynamic modules should be loaded from, absolute or relative
+    :return: new instance of Manager class
+    """
     # Get absolute path to reference
     abs_mod_dir_path = os.path.abspath(modules_dir_path)
 
@@ -131,4 +151,7 @@ def Init(modules_dir_path):
 
     return Manager(abs_mod_dir_path)
 
-Init("/Users/kainoa/Workspace/code/python/DynamicModules/modules")
+
+if __name__ == "__main__":
+    manager = Init("/Users/kainoa/Workspace/code/python/DynamicModules/modules")
+    manager.shutdown()
